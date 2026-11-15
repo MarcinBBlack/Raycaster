@@ -1,11 +1,10 @@
 ﻿using Raycaster;
-using System.Diagnostics;
 
 int mapWidth = 24;
 int mapHeight = 24;
 int screenWidth = 120;
 int screenHeight = 30;
-char[,] screenBuffer = new char[screenHeight, screenWidth];
+ScreenBufferData[,] screenBuffer = new ScreenBufferData[screenHeight, screenWidth];
 int[,] map = new int[,]
 {
   {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
@@ -38,9 +37,6 @@ double cameraPositionX = 15;
 double cameraPositionY = 20;
 double cameraRotationX = 1, cameraRotationY = 0;
 double planeX = 0, planeY = 0.66; //the 2d raycaster version of camera plane
-double currentFrameTime = 0; //time of current frame
-double previousFrameTime = 0; //time of previous frame
-double frameTime = 0;
 double rayXCoordinateInCameraSpace = 0;
 double rayDirectionX = 0;
 double rayDirectionY = 0;
@@ -60,16 +56,11 @@ double rayDirectionLength = Math.Sqrt(
 cameraRotationX /= rayDirectionLength;
 cameraRotationY /= rayDirectionLength;
 double rotationAngleInRadians = 5.0d * Math.PI / 180;
-double moveSpeed = 5.0f;
+double moveStep = 1f;
 
 Console.Clear();
-Stopwatch stopwatch = Stopwatch.StartNew();
-previousFrameTime = stopwatch.Elapsed.TotalSeconds;
 while (true)
 {
-    currentFrameTime = stopwatch.Elapsed.TotalSeconds;
-    frameTime = currentFrameTime - previousFrameTime;
-    previousFrameTime = currentFrameTime;
     for (int x = 0; x < screenWidth; x++)
     {
         rayXCoordinateInCameraSpace = 2 * x / (double)screenWidth - 1; //x-coordinate of vertical line in camera space (from -1 to 1), every x in loop is ray shot 
@@ -135,14 +126,7 @@ while (true)
 
         for (int y = 0; y < screenHeight; y++)
         {
-            if (y >= lineDrawData.LineDrawStartRowIndex && y < lineDrawData.LineDrawEndRowIndex)
-            {
-                screenBuffer[y, x] = GetDrawCharByHitValue(hit);
-            }
-            else
-            {
-                screenBuffer[y, x] = ' ';
-            }
+            screenBuffer[y, x] = GetScreenBufferData(hit, y, lineDrawData);
         }
 
 
@@ -150,15 +134,18 @@ while (true)
     Console.SetCursorPosition(0, 0);
     DrawScreenBuffer(screenBuffer);
 
-    
+
 
     if (Console.KeyAvailable)
     {
         var pressedKey = Console.ReadKey(intercept: true);
-        double moveDistanceX = moveSpeed * frameTime * cameraRotationX;
-        double moveDistanceY = moveSpeed * frameTime * cameraRotationY;
+        var moveDirection = pressedKey.Key == ConsoleKey.W ? 1 : -1;
+        double moveDistanceX = moveStep * moveDirection * cameraRotationX;
+        double moveDistanceY = moveStep * moveDirection * cameraRotationY;
+        var rotationDirection = pressedKey.Key == ConsoleKey.D ? 1 : -1;
+        var angle = rotationAngleInRadians * rotationDirection;
 
-        if (pressedKey.Key == ConsoleKey.W)
+        if (pressedKey.Key == ConsoleKey.W || pressedKey.Key == ConsoleKey.S)
         {
             double newPositionAfterMoveOnX = cameraPositionX + moveDistanceX;
             if (newPositionAfterMoveOnX >= 0 && newPositionAfterMoveOnX < mapWidth && map[(int)cameraPositionY, (int)newPositionAfterMoveOnX] == 0)
@@ -172,56 +159,49 @@ while (true)
             }
         }
 
-        if (pressedKey.Key == ConsoleKey.S)
-        {
-            double newPositionAfterMoveOnX = cameraPositionX - moveDistanceX;
-            if (newPositionAfterMoveOnX >= 0 && newPositionAfterMoveOnX < mapWidth && map[(int)cameraPositionY, (int)newPositionAfterMoveOnX] == 0)
-            {
-                cameraPositionX -= moveDistanceX;
-            }
-            double newPositionAfterMoveOnY = cameraPositionY - moveDistanceY;
-            if (newPositionAfterMoveOnY >= 0 && newPositionAfterMoveOnY < mapHeight && map[(int)newPositionAfterMoveOnY, (int)cameraPositionX] == 0)
-            {
-                cameraPositionY -= moveDistanceY;
-            }
-        }
-
-        if (pressedKey.Key == ConsoleKey.D)
+        if (pressedKey.Key == ConsoleKey.A || pressedKey.Key == ConsoleKey.D)
         {
             double currentCameraRotationX = cameraRotationX;
-            cameraRotationX = currentCameraRotationX * Math.Cos(rotationAngleInRadians) - cameraRotationY * Math.Sin(rotationAngleInRadians);
+            cameraRotationX = currentCameraRotationX * Math.Cos(angle) - cameraRotationY * Math.Sin(angle);
             double currentPlaneX = planeX;
-            planeX = currentPlaneX * Math.Cos(rotationAngleInRadians) - planeY * Math.Sin(rotationAngleInRadians);
+            planeX = currentPlaneX * Math.Cos(angle) - planeY * Math.Sin(angle);
 
-            cameraRotationY = currentCameraRotationX * Math.Sin(rotationAngleInRadians) + cameraRotationY * Math.Cos(rotationAngleInRadians);
-            planeY = currentPlaneX * Math.Sin(rotationAngleInRadians) + planeY * Math.Cos(rotationAngleInRadians);
-        }
-
-        if (pressedKey.Key == ConsoleKey.A)
-        {
-            double currentCameraRotationX = cameraRotationX;
-            cameraRotationX = currentCameraRotationX * Math.Cos(-rotationAngleInRadians) - cameraRotationY * Math.Sin(-rotationAngleInRadians);
-            double currentPlaneX = planeX;
-            planeX = currentPlaneX * Math.Cos(-rotationAngleInRadians) - planeY * Math.Sin(-rotationAngleInRadians);
-
-            cameraRotationY = currentCameraRotationX * Math.Sin(-rotationAngleInRadians) + cameraRotationY * Math.Cos(-rotationAngleInRadians);
-            planeY = currentPlaneX * Math.Sin(-rotationAngleInRadians) + planeY * Math.Cos(-rotationAngleInRadians);
+            cameraRotationY = currentCameraRotationX * Math.Sin(angle) + cameraRotationY * Math.Cos(angle);
+            planeY = currentPlaneX * Math.Sin(angle) + planeY * Math.Cos(angle);
         }
     }
 }
 
-static char GetDrawCharByHitValue(int hitValue)
+static ScreenBufferData GetScreenBufferData(int hitValue, int screenHitYPosition, LineDrawData lineDrawData)
 {
-    return hitValue == 0 ? ' ' : '#';
+    if (screenHitYPosition < lineDrawData.LineDrawStartRowIndex || screenHitYPosition >= lineDrawData.LineDrawEndRowIndex)
+    {
+        return new ScreenBufferData(' ', ConsoleColor.Black);
+    }
+
+    ConsoleColor color = hitValue switch
+    {
+        0 => ConsoleColor.Black,
+        1 => ConsoleColor.Blue,
+        2 => ConsoleColor.Red,
+        3 => ConsoleColor.Green,
+        4 => ConsoleColor.Yellow,
+        5 => ConsoleColor.DarkYellow,
+        _ => ConsoleColor.White
+    };
+    char drawCharacter = hitValue == 0 ? ' ' : '#';
+
+    return new ScreenBufferData(drawCharacter, color);
 }
 
-static void DrawScreenBuffer(char[,] screenBuffer)
+static void DrawScreenBuffer(ScreenBufferData[,] screenBuffer)
 {
     for (int y = 0; y < screenBuffer.GetLength(0); y++)
     {
         for (int x = 0; x < screenBuffer.GetLength(1); x++)
         {
-            Console.Write(screenBuffer[y, x]);
+            Console.ForegroundColor = screenBuffer[y, x].DrawColor;
+            Console.Write(screenBuffer[y, x].DrawCharacter);
         }
         Console.WriteLine();
     }
@@ -240,4 +220,5 @@ static Raycaster.LineDrawData GetLineDrawData(int screenHeight, double distanceT
 namespace Raycaster
 {
     readonly record struct LineDrawData(int LineDrawStartRowIndex, int LineDrawEndRowIndex);
+    readonly record struct ScreenBufferData(char DrawCharacter, ConsoleColor DrawColor);
 }
