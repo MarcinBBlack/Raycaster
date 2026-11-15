@@ -1,9 +1,10 @@
 ﻿using Raycaster;
+using System.Diagnostics;
 
 int mapWidth = 24;
 int mapHeight = 24;
-int screenWidth = 80;
-int screenHeight = 24;
+int screenWidth = 120;
+int screenHeight = 30;
 char[,] screenBuffer = new char[screenHeight, screenWidth];
 int[,] map = new int[,]
 {
@@ -33,12 +34,13 @@ int[,] map = new int[,]
   {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
 };
 
-double rayPositionX = 15;
-double rayPositionY = 20;
+double cameraPositionX = 15;
+double cameraPositionY = 20;
 double cameraRotationX = 1, cameraRotationY = 0;
 double planeX = 0, planeY = 0.66; //the 2d raycaster version of camera plane
-double time = 0; //time of current frame
-double oldTime = 0; //time of previous frame
+double currentFrameTime = 0; //time of current frame
+double previousFrameTime = 0; //time of previous frame
+double frameTime = 0;
 double rayXCoordinateInCameraSpace = 0;
 double rayDirectionX = 0;
 double rayDirectionY = 0;
@@ -58,8 +60,16 @@ double rayDirectionLength = Math.Sqrt(
 cameraRotationX /= rayDirectionLength;
 cameraRotationY /= rayDirectionLength;
 double rotationAngleInRadians = 5.0d * Math.PI / 180;
+double moveSpeed = 5.0f;
+
+Console.Clear();
+Stopwatch stopwatch = Stopwatch.StartNew();
+previousFrameTime = stopwatch.Elapsed.TotalSeconds;
 while (true)
-{ 
+{
+    currentFrameTime = stopwatch.Elapsed.TotalSeconds;
+    frameTime = currentFrameTime - previousFrameTime;
+    previousFrameTime = currentFrameTime;
     for (int x = 0; x < screenWidth; x++)
     {
         rayXCoordinateInCameraSpace = 2 * x / (double)screenWidth - 1; //x-coordinate of vertical line in camera space (from -1 to 1), every x in loop is ray shot 
@@ -67,31 +77,31 @@ while (true)
         rayDirectionY = cameraRotationY + planeY * rayXCoordinateInCameraSpace; // y coordinate of ray, one of many rays for each vertical line to be drawn on screen
         deltaDistanceX = rayDirectionX == 0 ? Double.PositiveInfinity : Math.Abs(1.0 / rayDirectionX); //Math.Sqrt(1 + (rayDirY * rayDirY) / (rayDirX * rayDirX)); -> |rayDir|/ rayDirX, |rayDir| is length of rayDir vector, but rayDir is direction vector so we set length as 1
         deltaDistanceY = rayDirectionY == 0 ? Double.PositiveInfinity : Math.Abs(1.0 / rayDirectionY); //analogically
-        rayCellCoordinateX = (int)rayPositionX; //in which x coordinate of world map's cell
-        rayCellCoordinateY = (int)rayPositionY; //in which y coordinate of world map's cell
+        rayCellCoordinateX = (int)cameraPositionX; //in which x coordinate of world map's cell
+        rayCellCoordinateY = (int)cameraPositionY; //in which y coordinate of world map's cell
         distanceToHit = 0;
 
         if (rayDirectionX < 0)
         {
             stepX = -1;
-            distanceToNearestX = (rayPositionX - rayCellCoordinateX) * deltaDistanceX;
+            distanceToNearestX = (cameraPositionX - rayCellCoordinateX) * deltaDistanceX;
         }
         else
         {
             stepX = 1;
-            distanceToNearestX = (rayCellCoordinateX + 1.0d - rayPositionX) * deltaDistanceX;
+            distanceToNearestX = (rayCellCoordinateX + 1.0d - cameraPositionX) * deltaDistanceX;
         }
 
 
         if (rayDirectionY < 0)
         {
             stepY = -1;
-            distanceToNearestY = (rayPositionY - rayCellCoordinateY) * deltaDistanceY;
+            distanceToNearestY = (cameraPositionY - rayCellCoordinateY) * deltaDistanceY;
         }
         else
         {
             stepY = 1;
-            distanceToNearestY = (rayCellCoordinateY + 1.0d - rayPositionY) * deltaDistanceY;
+            distanceToNearestY = (rayCellCoordinateY + 1.0d - cameraPositionY) * deltaDistanceY;
         }
 
         hit = map[rayCellCoordinateY, rayCellCoordinateX];
@@ -137,31 +147,66 @@ while (true)
 
 
     }
-    Console.Clear();
+    Console.SetCursorPosition(0, 0);
     DrawScreenBuffer(screenBuffer);
 
-    var pressedKey = Console.ReadKey();
+    
 
-    if (pressedKey.Key == ConsoleKey.D)
+    if (Console.KeyAvailable)
     {
-        double currentCameraRotationX = cameraRotationX;
-        cameraRotationX = currentCameraRotationX * Math.Cos(rotationAngleInRadians) - cameraRotationY * Math.Sin(rotationAngleInRadians);
-        double currentPlaneX = planeX;
-        planeX = currentPlaneX * Math.Cos(rotationAngleInRadians) - planeY * Math.Sin(rotationAngleInRadians);
+        var pressedKey = Console.ReadKey(intercept: true);
+        double moveDistanceX = moveSpeed * frameTime * cameraRotationX;
+        double moveDistanceY = moveSpeed * frameTime * cameraRotationY;
 
-        cameraRotationY = currentCameraRotationX * Math.Sin(rotationAngleInRadians) + cameraRotationY * Math.Cos(rotationAngleInRadians);
-        planeY = currentPlaneX * Math.Sin(rotationAngleInRadians) + planeY * Math.Cos(rotationAngleInRadians);
-    }
+        if (pressedKey.Key == ConsoleKey.W)
+        {
+            double newPositionAfterMoveOnX = cameraPositionX + moveDistanceX;
+            if (newPositionAfterMoveOnX >= 0 && newPositionAfterMoveOnX < mapWidth && map[(int)cameraPositionY, (int)newPositionAfterMoveOnX] == 0)
+            {
+                cameraPositionX += moveDistanceX;
+            }
+            double newPositionAfterMoveOnY = cameraPositionY + moveDistanceY;
+            if (newPositionAfterMoveOnY >= 0 && newPositionAfterMoveOnY < mapHeight && map[(int)newPositionAfterMoveOnY, (int)cameraPositionX] == 0)
+            {
+                cameraPositionY += moveDistanceY;
+            }
+        }
 
-    if (pressedKey.Key == ConsoleKey.A)
-    {
-        double currentCameraRotationX = cameraRotationX;
-        cameraRotationX = currentCameraRotationX * Math.Cos(-rotationAngleInRadians) - cameraRotationY * Math.Sin(-rotationAngleInRadians);
-        double currentPlaneX = planeX;
-        planeX = currentPlaneX * Math.Cos(-rotationAngleInRadians) - planeY * Math.Sin(-rotationAngleInRadians);
+        if (pressedKey.Key == ConsoleKey.S)
+        {
+            double newPositionAfterMoveOnX = cameraPositionX - moveDistanceX;
+            if (newPositionAfterMoveOnX >= 0 && newPositionAfterMoveOnX < mapWidth && map[(int)cameraPositionY, (int)newPositionAfterMoveOnX] == 0)
+            {
+                cameraPositionX -= moveDistanceX;
+            }
+            double newPositionAfterMoveOnY = cameraPositionY - moveDistanceY;
+            if (newPositionAfterMoveOnY >= 0 && newPositionAfterMoveOnY < mapHeight && map[(int)newPositionAfterMoveOnY, (int)cameraPositionX] == 0)
+            {
+                cameraPositionY -= moveDistanceY;
+            }
+        }
 
-        cameraRotationY = currentCameraRotationX * Math.Sin(-rotationAngleInRadians) + cameraRotationY * Math.Cos(-rotationAngleInRadians);
-        planeY = currentPlaneX * Math.Sin(-rotationAngleInRadians) + planeY * Math.Cos(-rotationAngleInRadians);
+        if (pressedKey.Key == ConsoleKey.D)
+        {
+            double currentCameraRotationX = cameraRotationX;
+            cameraRotationX = currentCameraRotationX * Math.Cos(rotationAngleInRadians) - cameraRotationY * Math.Sin(rotationAngleInRadians);
+            double currentPlaneX = planeX;
+            planeX = currentPlaneX * Math.Cos(rotationAngleInRadians) - planeY * Math.Sin(rotationAngleInRadians);
+
+            cameraRotationY = currentCameraRotationX * Math.Sin(rotationAngleInRadians) + cameraRotationY * Math.Cos(rotationAngleInRadians);
+            planeY = currentPlaneX * Math.Sin(rotationAngleInRadians) + planeY * Math.Cos(rotationAngleInRadians);
+        }
+
+        if (pressedKey.Key == ConsoleKey.A)
+        {
+            double currentCameraRotationX = cameraRotationX;
+            cameraRotationX = currentCameraRotationX * Math.Cos(-rotationAngleInRadians) - cameraRotationY * Math.Sin(-rotationAngleInRadians);
+            double currentPlaneX = planeX;
+            planeX = currentPlaneX * Math.Cos(-rotationAngleInRadians) - planeY * Math.Sin(-rotationAngleInRadians);
+
+            cameraRotationY = currentCameraRotationX * Math.Sin(-rotationAngleInRadians) + cameraRotationY * Math.Cos(-rotationAngleInRadians);
+            planeY = currentPlaneX * Math.Sin(-rotationAngleInRadians) + planeY * Math.Cos(-rotationAngleInRadians);
+        }
     }
 }
 
